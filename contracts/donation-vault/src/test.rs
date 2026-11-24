@@ -4877,20 +4877,27 @@ fn set_registry_and_registry_getter() {
     assert_eq!(s.client.registry(), None);
     assert_eq!(s.client.get_config().registry, None);
 
-    let registry_addr = Address::generate(&s.env);
-    s.client.set_registry(&registry_addr);
+    let admin = s.client.admin();
+    let registry_id = s.env.register(
+        ngo_registry::NgoRegistry,
+        ngo_registry::NgoRegistryArgs::__constructor(&admin),
+    );
+    s.client.set_registry(&registry_id);
 
-    assert_eq!(s.client.registry(), Some(registry_addr.clone()));
-    assert_eq!(s.client.get_config().registry, Some(registry_addr));
+    assert_eq!(s.client.registry(), Some(registry_id.clone()));
+    assert_eq!(s.client.get_config().registry, Some(registry_id));
 }
 
 #[test]
 fn set_registry_requires_admin_auth() {
     let s = setup();
     let admin = s.client.admin();
-    let registry_addr = Address::generate(&s.env);
+    let registry_id = s.env.register(
+        ngo_registry::NgoRegistry,
+        ngo_registry::NgoRegistryArgs::__constructor(&admin),
+    );
 
-    s.client.set_registry(&registry_addr);
+    s.client.set_registry(&registry_id);
     assert_auth_required_from(&s, &admin, "set_registry");
 }
 
@@ -4902,6 +4909,44 @@ fn set_registry_fails_without_admin_auth() {
 
     s.env.mock_auths(&[]);
     s.client.set_registry(&registry_addr);
+}
+
+#[test]
+fn set_registry_accepts_valid_registry() {
+    let s = setup();
+    let admin = s.client.admin();
+    let registry_id = s.env.register(
+        ngo_registry::NgoRegistry,
+        ngo_registry::NgoRegistryArgs::__constructor(&admin),
+    );
+
+    s.client.set_registry(&registry_id);
+
+    assert_eq!(s.client.registry(), Some(registry_id));
+}
+
+#[test]
+fn set_registry_rejects_random_contract() {
+    let s = setup();
+    let token_admin = Address::generate(&s.env);
+    let sac = s
+        .env
+        .register_stellar_asset_contract_v2(token_admin.clone());
+    let random_contract = sac.address();
+
+    let result = s.client.try_set_registry(&random_contract);
+    assert_eq!(result, Err(Ok(Error::InvalidRegistry)));
+    assert_eq!(s.client.registry(), None);
+}
+
+#[test]
+fn set_registry_rejects_vault_own_address() {
+    let s = setup();
+    let vault_address = s.client.address.clone();
+
+    let result = s.client.try_set_registry(&vault_address);
+    assert_eq!(result, Err(Ok(Error::InvalidRegistry)));
+    assert_eq!(s.client.registry(), None);
 }
 
 #[test]

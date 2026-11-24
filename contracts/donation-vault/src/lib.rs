@@ -546,6 +546,11 @@ pub enum Error {
     /// `modify_rate` before any funds move. Distinct from `InvalidAmount`,
     /// which only covers a zero or negative amount. See issue #340.
     StreamTooShort = 39,
+    /// `set_registry` was given an address that is not a compatible NGO
+    /// registry contract. The vault probes the target with a harmless
+    /// registry call (such as `ngo_count`) before storing it and rejects the
+    /// address if that call fails.
+    InvalidRegistry = 40,
     // Error numbers are append-only: never renumber, reuse, or remove a
     // variant. New errors take the next unused number. See
     // docs/UPGRADE_POLICY.md.
@@ -2529,6 +2534,13 @@ impl DonationVault {
     /// ```
     pub fn set_registry(env: Env, registry: Address) -> Result<(), Error> {
         require_admin(&env)?;
+        env.try_invoke_contract::<u64, soroban_sdk::Error>(
+            &registry,
+            &soroban_sdk::Symbol::new(&env, "ngo_count"),
+            soroban_sdk::Vec::new(&env),
+        )
+        .map_err(|_| Error::InvalidRegistry)?
+        .map_err(|_| Error::InvalidRegistry)?;
         env.storage().instance().set(&DataKey::Registry, &registry);
         extend_instance_ttl(&env);
 
